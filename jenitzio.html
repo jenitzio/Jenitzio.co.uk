@@ -6,7 +6,7 @@
 <meta content="Jenitzio — Personal hub, subdomain index &amp; AI assistant." name="description"/>
 <meta content="#04101f" name="theme-color"/>
 <meta content="strict-origin-when-cross-origin" name="referrer"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https:; worker-src 'self' blob:"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https: http://127.0.0.1:8001 http://localhost:8001; worker-src 'self' blob:"/>
 <meta content="yes" name="apple-mobile-web-app-capable"/>
 <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
 <script id="hub-preferences">(()=>{let lite=false;try{lite=JSON.parse(localStorage.getItem('liteMode'))==='on'}catch{}document.documentElement.dataset.lite=lite?'1':'0'})();</script>
@@ -1137,7 +1137,7 @@ $("#fabAi").addEventListener("click", () => openAi(true)), $("#heroAi").addEvent
   } catch {
   }
 });
-const AUTH_SERVER = window.location.origin, loginBackdrop = $("#loginBackdrop"), authForm = $("#authForm"), authUser = $("#authUser"), authPass = $("#authPass"), authMsg = $("#authMsg"), authSubmit = $("#authSubmit"), authLogout = $("#authLogout"), authTitle = $("#authTitle"), diUser = $("#diUser"), diUserName = $("#diUserName"), diUserAv = $("#diUserAv");
+const AUTH_SERVER = "http://127.0.0.1:8001", loginBackdrop = $("#loginBackdrop"), authForm = $("#authForm"), authUser = $("#authUser"), authPass = $("#authPass"), authMsg = $("#authMsg"), authSubmit = $("#authSubmit"), authLogout = $("#authLogout"), authTitle = $("#authTitle"), diUser = $("#diUser"), diUserName = $("#diUserName"), diUserAv = $("#diUserAv");
 let authMode = "login";
 function setAuthMsg(e, t = "") {
   authMsg.textContent = e || "", authMsg.className = "auth-msg" + (t ? " " + t : "");
