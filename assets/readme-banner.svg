@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">Jenitzio.co.uk — a personal hub for a digital universe</title>
+  <desc id="desc">A deep navy background with a luminous cyan and violet ocean-like horizon, orbit lines, and the Jenitzio wordmark.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#061426"/>
+      <stop offset="55%" stop-color="#09152c"/>
+      <stop offset="100%" stop-color="#160d30"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00d9ff" stop-opacity=".05"/>
+      <stop offset="40%" stop-color="#00d9ff" stop-opacity=".9"/>
+      <stop offset="72%" stop-color="#7c5cff" stop-opacity=".95"/>
+      <stop offset="100%" stop-color="#ff5fd2" stop-opacity=".38"/>
+    </linearGradient>
+    <linearGradient id="type" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#f5fbff"/>
+      <stop offset="55%" stop-color="#c8f7ff"/>
+      <stop offset="100%" stop-color="#c6baff"/>
+    </linearGradient>
+    <radialGradient id="glowA">
+      <stop offset="0%" stop-color="#00cfff" stop-opacity=".25"/>
+      <stop offset="100%" stop-color="#00cfff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB">
+      <stop offset="0%" stop-color="#815bff" stop-opacity=".24"/>
+      <stop offset="100%" stop-color="#815bff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#9adfff" stroke-opacity=".08" stroke-width="1"/>
+      <circle cx="0" cy="0" r="1.4" fill="#b8ecff" fill-opacity=".2"/>
+    </pattern>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="24"/>
+    </filter>
+    <filter id="softglow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blurred"/>
+      <feMerge><feMergeNode in="blurred"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="clip"><rect width="1200" height="360" rx="24"/></clipPath>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="1200" height="360" fill="url(#bg)"/>
+    <rect width="1200" height="360" fill="url(#grid)"/>
+    <ellipse cx="180" cy="30" rx="360" ry="220" fill="url(#glowA)" filter="url(#blur)"/>
+    <ellipse cx="1040" cy="330" rx="340" ry="240" fill="url(#glowB)" filter="url(#blur)"/>
+    <g fill="none" stroke-width="1.2" opacity=".58">
+      <ellipse cx="970" cy="182" rx="280" ry="102" stroke="#27dfff" stroke-opacity=".3" transform="rotate(-17 970 182)"/>
+      <ellipse cx="970" cy="182" rx="230" ry="142" stroke="#9d8bff" stroke-opacity=".24" transform="rotate(24 970 182)"/>
+      <ellipse cx="970" cy="182" rx="185" ry="78" stroke="#27dfff" stroke-opacity=".2" transform="rotate(54 970 182)"/>
+    </g>
+    <g fill="none" stroke="url(#wave)" filter="url(#softglow)">
+      <path d="M-60 260 C130 196 235 324 432 256 S725 175 883 226 S1091 290 1260 176" stroke-width="2.6" opacity=".95"/>
+      <path d="M-60 278 C126 214 242 340 438 272 S718 191 889 242 S1092 306 1260 194" stroke-width="1.4" opacity=".8"/>
+      <path d="M-60 294 C135 232 256 356 449 289 S720 211 898 258 S1094 322 1260 211" stroke-width="1" opacity=".55"/>
+      <path d="M-60 242 C134 178 230 304 426 238 S721 158 876 209 S1088 274 1260 161" stroke-width="1" opacity=".52"/>
+    </g>
+    <g fill="#c4f6ff">
+      <circle cx="862" cy="99" r="2.4" opacity=".95"/>
+      <circle cx="1043" cy="76" r="1.8" opacity=".7"/>
+      <circle cx="1112" cy="145" r="2.1" opacity=".72"/>
+      <circle cx="782" cy="151" r="1.5" opacity=".65"/>
+      <circle cx="1002" cy="283" r="1.6" opacity=".65"/>
+      <circle cx="1150" cy="245" r="1.4" opacity=".8"/>
+    </g>
+    <g transform="translate(76 74)">
+      <rect width="46" height="46" rx="14" fill="#0bd6f4" fill-opacity=".1" stroke="#5ceaff" stroke-opacity=".55"/>
+      <path d="M11 28 L23 10 L35 28 M16 23 H30 M23 10 V36" fill="none" stroke="#8af1ff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <text x="76" y="174" fill="url(#type)" font-family="Inter, Arial, sans-serif" font-size="52" font-weight="800" letter-spacing="-1.8">JENITZIO.CO.UK</text>
+    <text x="79" y="211" fill="#b6c9df" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="500" letter-spacing="3.2">A PERSONAL HUB FOR A DIGITAL UNIVERSE</text>
+    <rect x="78" y="242" width="76" height="3" rx="1.5" fill="#05d8f6"/>
+    <rect x="160" y="242" width="42" height="3" rx="1.5" fill="#7d68ff"/>
+    <text x="79" y="280" fill="#7f9ab7" font-family="JetBrains Mono, monospace" font-size="12" letter-spacing="1.4">TOOLS  /  GAMES  /  HISTORY  /  EXPERIMENTS</text>
+    <text x="1120" y="326" fill="#8aa6c4" font-family="JetBrains Mono, monospace" font-size="11" text-anchor="end" letter-spacing="1.4">BUILT TO EXPLORE</text>
+  </g>
+</svg>
