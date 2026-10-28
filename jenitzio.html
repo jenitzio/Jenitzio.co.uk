@@ -6,7 +6,7 @@
 <meta content="Jenitzio — Personal hub, subdomain index &amp; AI assistant." name="description"/>
 <meta content="#04101f" name="theme-color"/>
 <meta content="strict-origin-when-cross-origin" name="referrer"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https: http://127.0.0.1:8001 http://localhost:8001; worker-src 'self' blob:"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src https://text.pollinations.ai; worker-src 'self' blob:"/>
 <meta content="yes" name="apple-mobile-web-app-capable"/>
 <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
 <script id="hub-preferences">(()=>{let lite=false;try{lite=JSON.parse(localStorage.getItem('liteMode'))==='on'}catch{}document.documentElement.dataset.lite=lite?'1':'0'})();</script>
@@ -446,141 +446,12 @@ html[data-lite="1"] #interactive-dot-field { display:none !important; }
 </form>
 <div class="auth-msg" id="authMsg"></div>
 <button class="auth-submit" id="authLogout" style="display:none;background:var(--surface-2);color:var(--fg);box-shadow:none;border:1px solid var(--line)" type="button">Log out</button>
-<div class="auth-server">🔌 Local server · same origin</div>
+<div class="auth-server">🔒 Backend integration disabled in this public source build</div>
 </div>
 </div>
 </div>
 <div aria-live="polite" class="toast-tray" id="toastTray"></div>
-<script id="hub-core">/* IndexedDB is an asynchronous, disposable cache, not an OS swap file.
-   Only public profile responses enter it; credentials and private messages never do. */
-const Pagefile = (() => {
-  'use strict';
-  const DB_NAME = 'jenitzio-pagefile-v1', STORE = 'profiles';
-  const MAX_ENTRIES = 48, MAX_BYTES = 256 * 1024;
-  const FRESH_MS = 5 * 60 * 1000, MAX_AGE_MS = 24 * 60 * 60 * 1000;
-  let connection = null, opening = null, unavailable = false, generation = 0;
-  const pending = new Map();
-  function open() {
-    if (connection) return Promise.resolve(connection);
-    if (unavailable) return Promise.resolve(null);
-    if (opening) return opening;
-    opening = new Promise(resolve => {
-      let request, finished = false;
-      const finish = db => {
-        if (finished) { if (db) db.close(); return; }
-        finished = true; clearTimeout(timer);
-        if (!db) unavailable = true;
-        connection = db;
-        if (db) db.onversionchange = () => { db.close(); connection = null; opening = null; };
-        resolve(db);
-      };
-      const timer = setTimeout(() => finish(null), 1500);
-      try {
-        request = indexedDB.open(DB_NAME, 1);
-        request.onupgradeneeded = () => {
-          const db = request.result;
-          if (!db.objectStoreNames.contains(STORE)) {
-            const store = db.createObjectStore(STORE, {keyPath: 'key'});
-            store.createIndex('storedAt', 'storedAt');
-          }
-        };
-        request.onsuccess = () => finish(request.result);
-        request.onerror = () => finish(null);
-        request.onblocked = () => finish(null);
-      } catch { finish(null); }
-    });
-    return opening;
-  }
-  async function transaction(mode, action) {
-    const db = await open();
-    if (!db) return null;
-    return new Promise(resolve => {
-      let tx, value = null, done = false;
-      const finish = result => {
-        if (done) return;
-        done = true; clearTimeout(timer); resolve(result);
-      };
-      const timer = setTimeout(() => { try { tx?.abort(); } catch {} finish(null); }, 1500);
-      try {
-        tx = db.transaction(STORE, mode);
-        tx.oncomplete = () => finish(value);
-        tx.onerror = tx.onabort = () => finish(null);
-        action(tx.objectStore(STORE), result => { value = result; });
-      } catch { finish(null); }
-    });
-  }
-  async function get(key) {
-    return transaction('readonly', (store, result) => {
-      const req = store.get(key);
-      req.onsuccess = () => {
-        const entry = req.result;
-        if (entry && Date.now() - entry.storedAt >= 0 && Date.now() - entry.storedAt < MAX_AGE_MS) result(entry);
-      };
-    });
-  }
-  async function put(key, value, expectedGeneration = generation) {
-    if (expectedGeneration !== generation) return false;
-    let size;
-    try { size = new Blob([JSON.stringify(value)]).size; } catch { return false; }
-    if (size > MAX_BYTES) return false;
-    return !!await transaction('readwrite', (store, result) => {
-      if (expectedGeneration !== generation) return;
-      store.put({key, value, storedAt: Date.now(), bytes: size});
-      const count = store.count();
-      count.onsuccess = () => {
-        let excess = Math.max(0, count.result - MAX_ENTRIES);
-        const cursor = store.index('storedAt').openCursor();
-        cursor.onsuccess = () => {
-          const row = cursor.result;
-          if (!row) return;
-          if (excess > 0 || row.value.storedAt < Date.now() - MAX_AGE_MS) {
-            row.delete(); excess = Math.max(0, excess - 1); row.continue();
-          }
-        };
-      };
-      result(true);
-    });
-  }
-  async function clear() {
-    generation++;
-    pending.clear();
-    return !!await transaction('readwrite', (store, result) => { store.clear(); result(true); });
-  }
-  async function profile(url) {
-    let parsed;
-    try { parsed = new URL(url); } catch { return null; }
-    if (parsed.origin !== window.location.origin ||
-        !/^\/api\/profile\/[^/]+$/.test(parsed.pathname) || parsed.search || parsed.username || parsed.password) return null;
-    const key = parsed.href;
-    if (pending.has(key)) return pending.get(key);
-    const version = generation;
-    const task = (async () => {
-      const entry = await get(key);
-      if (entry && Date.now() - entry.storedAt < FRESH_MS) return entry.value;
-      try {
-        const response = await safeFetch(key, {headers: {Accept: 'application/json'}, credentials: 'omit'}, 10000);
-        if (!response.ok) {
-          if (response.status >= 500) return entry?.value || null;
-          return null;
-        }
-        const text = await response.text();
-        if (text.length > MAX_BYTES) return null;
-        const value = JSON.parse(text);
-        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-        await put(key, value, version);
-        return value;
-      } catch { return entry?.value || null; }
-    })();
-    pending.set(key, task);
-    try { return await task; } finally { if (pending.get(key) === task) pending.delete(key); }
-  }
-  addEventListener('pagehide', () => {
-    if (connection) connection.close();
-    connection = null; opening = null;
-  });
-  return Object.freeze({profile, clear, limits: Object.freeze({maxEntries: MAX_ENTRIES, maxEntryBytes: MAX_BYTES, maxAgeMs: MAX_AGE_MS})});
-})();
-
+<script id="hub-core">
 "use strict";
 const safeFetch = (input, init = {}, timeout = 15e3) => {
   const options = Object.assign({}, init);
@@ -1137,441 +1008,41 @@ $("#fabAi").addEventListener("click", () => openAi(true)), $("#heroAi").addEvent
   } catch {
   }
 });
-const AUTH_SERVER = "http://127.0.0.1:8001", loginBackdrop = $("#loginBackdrop"), authForm = $("#authForm"), authUser = $("#authUser"), authPass = $("#authPass"), authMsg = $("#authMsg"), authSubmit = $("#authSubmit"), authLogout = $("#authLogout"), authTitle = $("#authTitle"), diUser = $("#diUser"), diUserName = $("#diUserName"), diUserAv = $("#diUserAv");
-let authMode = "login";
-function setAuthMsg(e, t = "") {
-  authMsg.textContent = e || "", authMsg.className = "auth-msg" + (t ? " " + t : "");
-}
-function getSession() {
-  return ls.get("auth_session", null);
-}
-function setSession(e) {
-  ls.set("auth_session", e), renderAuthState(), document.dispatchEvent(new CustomEvent("authchange"));
-}
+
+const loginBackdrop = $("#loginBackdrop");
+function getSession() { return null; }
 function clearSession() {
-  try {
-    localStorage.removeItem("auth_session");
-  } catch {
-  }
-  renderAuthState(), document.dispatchEvent(new CustomEvent("authchange"));
+  try { localStorage.removeItem("auth_session"); } catch {}
 }
-function renderAuthState() {
-  const e = getSession();
-  e && e.username ? (diUser.classList.add("show"), diUserName.textContent = e.username, diUserAv.textContent = e.username.charAt(0).toUpperCase(), authLogout.style.display = "", authForm.style.display = "none", authTitle.textContent = `Hi, ${e.username}`, $$(".auth-tabs").forEach((e2) => e2.style.display = "none")) : (diUser.classList.remove("show"), authLogout.style.display = "none", authForm.style.display = "", authTitle.textContent = "login" === authMode ? "Sign in" : "Create account", $$(".auth-tabs").forEach((e2) => e2.style.display = ""));
-}
+function renderAuthState() {}
 function openLogin() {
-  loginBackdrop.classList.add("open"), setAuthMsg(""), setTimeout(() => {
-    "none" !== authForm.style.display && authUser.focus();
-  }, 80), blip(580, 0.04);
+  toast("Account sign-in is disabled in this public source build.", "🔒");
 }
 function closeLogin() {
-  loginBackdrop.classList.remove("open");
+  if (loginBackdrop) loginBackdrop.classList.remove("open");
 }
-async function authRequest(e, t) {
-  const n = await safeFetch(AUTH_SERVER + e, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(t) });
-  let a = {};
-  try {
-    a = await n.json();
-  } catch {
-  }
-  return { ok: n.ok, status: n.status, data: a };
-}
-$("#navLogin").addEventListener("click", () => {
-  const e = getSession();
-  if (e && e.username) try {
-    return void ChatHub.openSelfProfile();
-  } catch {
-  }
-  openLogin();
-}), $("#loginClose").addEventListener("click", closeLogin), $$(".auth-tabs button").forEach((e) => {
-  e.addEventListener("click", () => {
-    authMode = e.dataset.tab, $$(".auth-tabs button").forEach((t) => t.dataset.active = (t === e) + ""), authTitle.textContent = "login" === authMode ? "Sign in" : "Create account", authSubmit.textContent = "login" === authMode ? "Sign in \u2192" : "Create account \u2192", authPass.setAttribute("autocomplete", "login" === authMode ? "current-password" : "new-password"), setAuthMsg("");
-  });
-}), authForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const t = authUser.value.trim(), n = authPass.value;
-  if (!t || !n) return void setAuthMsg("Enter a username and password.", "error");
-  authSubmit.disabled = true, setAuthMsg("login" === authMode ? "Signing in\u2026" : "Creating account\u2026");
-  const a = "login" === authMode ? "/login" : "/register";
-  try {
-    const { ok: e2, status: o, data: s } = await authRequest(a, { username: t, password: n });
-    if (e2) {
-      const e3 = s.token || s.session || null;
-      setSession({ username: s.username || t, token: e3, at: Date.now() }), setAuthMsg("login" === authMode ? "Welcome back!" : "Account created!", "ok"), toast(`Signed in as ${t}`, "\u{1F511}"), pushNotif("Signed in", `Connected to the hub as ${t}.`, "\u{1F511}"), blip(720, 0.08, "triangle"), authPass.value = "", setTimeout(closeLogin, 700);
-    } else setAuthMsg(s.message || s.error || `Failed (${o}). Check your details.`, "error");
-  } catch (e2) {
-    setAuthMsg("Could not reach the server. It may be waking up \u2014 try again.", "error");
-  } finally {
-    authSubmit.disabled = false;
-  }
-}), authLogout.addEventListener("click", async () => {
-  const e = getSession();
-  try {
-    e && e.token && await authRequest("/logout", { token: e.token });
-  } catch {
-  }
-  clearSession(), setAuthMsg("Logged out.", "ok"), toast("Logged out", "\u{1F44B}");
-}), renderAuthState();
-const ChatHub = (function() {
-  const e = $("#chatPanel"), t = $("#chatRooms"), n = $("#chatPeople"), a = $("#peopleList"), o = $("#peopleSearch"), s = $("#chatConvo"), i = $("#chatMsgs"), r = $("#chatInput"), l = $("#chatSend"), c = $("#chatTitle"), d = $("#chatOnline"), u = $("#chatOnlineN"), p = $("#chatBack"), h = $("#chatLocked"), m = $("#chatFoot"), f = $("#chatNote"), g = $("#chatTabs"), v = $("#dmTabCount");
-  if (!e) return {};
-  let y = "rooms", b = null, w = "", L = null, S = false, k = 0, C = null, x = null, E = false, A = /* @__PURE__ */ new Set(), T = 0, M = null, I = ls.get("dm_store", {}), H = ls.get("dm_unread", {}), F = [], P = ls.get("known_people", {});
-  const B = (e2) => String(e2).replace(/[&<>"']/g, (e3) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[e3]), _ = (e2) => {
-    try {
-      return new Date(e2).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    } catch {
-      return "";
-    }
-  }, O = () => (getSession() || {}).username || "", j = (e2) => (e2 || "?").trim().charAt(0).toUpperCase();
-  let peopleSaveTimer;
-  addEventListener("pagehide", () => { if (peopleSaveTimer) { clearTimeout(peopleSaveTimer); ls.set("known_people", P); } });
-  function N(e2, t2 = {}) {
-    if (!e2) return;
-    const n2 = e2.toLowerCase();
-    const previous = P[n2];
-    if (previous && Object.keys(t2).every(key => previous[key] === t2[key])) return;
-    P[n2] = Object.assign({name: e2, joined: previous?.joined, lastSeen: Date.now()}, previous || {}, t2, {name: e2});
-    clearTimeout(peopleSaveTimer); peopleSaveTimer = setTimeout(() => ls.set("known_people", P), 300);
-  }
-  const inFlight = new Map();
-  function D(path, options = {}) {
-    const method = (options.method || "GET").toUpperCase();
-    if (method !== "GET") return requestChat(path, options);
-    const key = (getSession()?.token || "") + ":" + path;
-    if (inFlight.has(key)) return inFlight.get(key);
-    const task = requestChat(path, options).finally(() => inFlight.delete(key));
-    inFlight.set(key, task); return task;
-  }
-  async function requestChat(e2, t2 = {}) {
-    const n2 = getSession(), a2 = Object.assign({ "Content-Type": "application/json" }, t2.headers || {});
-    n2 && n2.token && (a2.Authorization = "Bearer " + n2.token);
-    const o2 = await safeFetch(AUTH_SERVER + e2, Object.assign({}, t2, { headers: a2 }));
-    let s2 = {};
-    try {
-      s2 = await o2.json();
-    } catch {
-    }
-    return { ok: o2.ok, status: o2.status, data: s2 };
-  }
-  function R(e2) {
-    $$("#chatTabs button").forEach((t2) => t2.dataset.active = (t2.dataset.view === e2) + ""), g.style.display = "", p.style.display = "none", d.style.display = "none", s.hidden = true, t.style.display = "none", n.hidden = true, clearInterval(C), C = null, b = null, L = null, S = false, "rooms" === e2 ? (y = "rooms", c.textContent = "\u{1F4AC} Rooms", t.style.display = "", U()) : "dms" === e2 ? (y = "dms", c.textContent = "\u2709\uFE0F Messages", n.hidden = false, o.value = "", W(true)) : "people" === e2 && (y = "people", c.textContent = "\u{1F465} People", n.hidden = false, o.value = "", V());
-  }
-  function q() {
-    const e2 = Object.values(H).reduce((e3, t2) => e3 + (t2 || 0), 0);
-    e2 > 0 ? (v.style.display = "", v.textContent = e2 > 99 ? "99+" : e2) : v.style.display = "none";
-  }
-  async function z() {
-    if (!getSession() || !getSession().token) return false;
-    try {
-      const { ok: e2, data: t2 } = await D("/api/dms");
-      if (e2 && t2 && Array.isArray(t2.conversations)) return F = t2.conversations, H = {}, F.forEach((e3) => {
-        const t3 = e3.peer.toLowerCase();
-        N(e3.peer, { online: !!e3.online }), S && L && L.toLowerCase() === t3 || (H[t3] = e3.unread || 0);
-      }), ls.set("dm_unread", H), q(), true;
-    } catch {
-    }
-    return false;
-  }
-  async function U() {
-    try {
-      const { ok: e2, data: a2 } = await D("/api/rooms");
-      if (!e2 || !a2.rooms) return void (t.innerHTML = '<div class="chat-empty">Could not reach the chat server. It may be waking up \u2014 try again in a moment.</div>');
-      t.innerHTML = a2.rooms.map((e3, t2) => `
-        <button class="room-card" data-room="${B(e3.id)}" data-name="${B(e3.name)}" style="animation-delay:${(0.05 * t2).toFixed(2)}s">
-          <span class="r-emoji">${e3.emoji || "\u{1F4AC}"}</span>
-          <span class="r-body">
-            <span class="r-name">${B(e3.name)} ${e3.online ? `<span class="r-count">${e3.online} online</span>` : ""}</span>
-            <span class="r-desc">${B(e3.desc || "")}</span>
-            ${e3.last ? `<span class="r-last"><b>${B(e3.last.user)}:</b> ${B(e3.last.text)}</span>` : '<span class="r-last">No messages yet \u2014 be the first!</span>'}
-          </span>
-        </button>`).join(""), t.querySelectorAll(".room-card").forEach((e3) => {
-        e3.addEventListener("click", () => {
-          return a3 = e3.dataset.room, o2 = e3.dataset.name, y = "convo", S = false, L = null, b = a3, w = o2, k = 0, A = /* @__PURE__ */ new Set(), c.textContent = o2, d.style.display = "", p.style.display = "inline-grid", g.style.display = "none", t.style.display = "none", n.hidden = true, s.hidden = false, f.textContent = "Be kind \u2014 profanity is filtered automatically. \u{1F9FC}", r.placeholder = "Message\u2026  (Enter to send)", i.innerHTML = '<div class="chat-empty">Loading messages\u2026</div>', Z(), te(), clearInterval(C), C = setInterval(te, 2500), blip(620, 0.05, "sine"), void setTimeout(() => {
-            getSession() && getSession().token && r.focus();
-          }, 200);
-          var a3, o2;
-        });
-      });
-    } catch {
-      t.innerHTML = '<div class="chat-empty">Offline \u2014 the chat server is unreachable right now.</div>';
-    }
-  }
-  async function V() {
-    a.innerHTML = '<div class="people-empty">Loading people\u2026</div>';
-    let e2 = [];
-    for (const t3 of ["/api/users", "/api/people", "/api/members"]) try {
-      const { ok: n3, data: a2 } = await D(t3), o2 = a2 && (a2.users || a2.people || a2.members);
-      if (n3 && Array.isArray(o2)) {
-        e2 = o2;
-        break;
-      }
-    } catch {
-    }
-    const t2 = {};
-    e2.forEach((e3) => {
-      const n3 = e3.username || e3.name;
-      n3 && (t2[n3.toLowerCase()] = { name: n3, online: !!e3.online, bio: e3.bio || "", joined: e3.joined || e3.createdAt });
-    }), Object.values(P).forEach((e3) => {
-      const n3 = e3.name.toLowerCase();
-      t2[n3] || (t2[n3] = { name: e3.name, online: false, bio: e3.bio || "", joined: e3.joined });
-    });
-    const n2 = O().toLowerCase();
-    let s2 = Object.values(t2).filter((e3) => e3.name.toLowerCase() !== n2);
-    !(function(e3, t3 = "") {
-      const n3 = (t3 || "").toLowerCase(), o2 = n3 ? e3.filter((e4) => e4.name.toLowerCase().includes(n3)) : e3;
-      o2.length ? (a.innerHTML = o2.sort((e4, t4) => (t4.online ? 1 : 0) - (e4.online ? 1 : 0) || e4.name.localeCompare(t4.name)).map((e4) => `
-      <div class="person-card" data-user="${B(e4.name)}">
-        <span class="person-av">${B(j(e4.name))}<span class="pres ${e4.online ? "on" : ""}"></span></span>
-        <span class="person-body">
-          <span class="person-name">${B(e4.name)}</span>
-          <span class="person-status">${e4.online ? "\u{1F7E2} Online" : "\u26AA Offline"}${e4.bio ? " \xB7 " + B(e4.bio.slice(0, 40)) : ""}</span>
-        </span>
-        <span class="person-actions">
-          <button data-act="profile" title="View profile">\u{1F464}</button>
-          <button data-act="dm" title="Message">\u2709\uFE0F</button>
-        </span>
-      </div>`).join(""), a.querySelectorAll(".person-card").forEach((e4) => {
-        const t4 = e4.dataset.user;
-        e4.querySelector('[data-act="profile"]').addEventListener("click", (e5) => {
-          e5.stopPropagation(), ie(t4);
-        }), e4.querySelector('[data-act="dm"]').addEventListener("click", (e5) => {
-          e5.stopPropagation(), K(t4);
-        }), e4.addEventListener("click", () => ie(t4));
-      })) : a.innerHTML = `<div class="people-empty">${t3 ? 'No people match "' + B(t3) + '".' : "No people found yet. Chat in a room to discover others! \u{1F44B}"}</div>`;
-    })(s2, o.value.trim()), s2.forEach((e3) => N(e3.name, { bio: e3.bio, joined: e3.joined }));
-  }
-  $$("#chatTabs button").forEach((e2) => e2.addEventListener("click", () => {
-    R(e2.dataset.view), blip(520, 0.04, "sine");
-  })), o.addEventListener("input", () => {
-    "people" === y ? J() : "dms" === y && W();
-  });
-  let G = null;
-  function J() {
-    clearTimeout(G), G = setTimeout(V, 250);
-  }
-  function W(e2 = true) {
-    e2 && z().then((e3) => {
-      e3 && "dms" === y && W(false);
-    });
-    const t2 = o.value.trim().toLowerCase();
-    let n2;
-    n2 = F.length ? F.map((e3) => ({ key: e3.peer.toLowerCase(), name: e3.peer, last: e3.last, online: !!e3.online, unread: e3.unread || 0 })) : Object.keys(I).map((e3) => {
-      const t3 = I[e3] || [], n3 = t3[t3.length - 1];
-      return { key: e3, name: P[e3] && P[e3].name || n3 && (n3.from.toLowerCase() === e3 ? n3.from : n3.to) || e3, last: n3, online: !(!P[e3] || !P[e3].online), unread: H[e3] || 0 };
-    }), n2 = n2.filter((e3) => !t2 || e3.name.toLowerCase().includes(t2)).sort((e3, t3) => (t3.last?.ts || 0) - (e3.last?.ts || 0)), n2.length ? (a.innerHTML = n2.map((e3) => `
-      <div class="person-card" data-user="${B(e3.name)}">
-        <span class="person-av">${B(j(e3.name))}<span class="pres ${e3.online ? "on" : ""}"></span></span>
-        <span class="person-body">
-          <span class="person-name">${B(e3.name)} ${e3.unread ? `<span class="dm-unread">${e3.unread}</span>` : ""}</span>
-          <span class="person-status">${e3.last ? (e3.last.from.toLowerCase() === O().toLowerCase() ? "You: " : "") + B(String(e3.last.text).slice(0, 42)) : "Say hi \u{1F44B}"}</span>
-        </span>
-        <span class="person-actions"><button data-act="profile" title="View profile">\u{1F464}</button></span>
-      </div>`).join(""), a.querySelectorAll(".person-card").forEach((e3) => {
-      const t3 = e3.dataset.user;
-      e3.querySelector('[data-act="profile"]').addEventListener("click", (e4) => {
-        e4.stopPropagation(), ie(t3);
-      }), e3.addEventListener("click", () => K(t3));
-    })) : a.innerHTML = '<div class="people-empty">No conversations yet.<br>Go to <b>People</b> \u{1F465} to start a direct message.</div>';
-  }
-  function Y(e2) {
-    return e2.toLowerCase();
-  }
-  function K(e2) {
-    if (!e2) return;
-    if (!getSession() || !getSession().token) {
-      toast("Sign in to send direct messages", "\u{1F511}");
-      try {
-        openLogin();
-      } catch {
-      }
-      return;
-    }
-    if (e2.toLowerCase() === O().toLowerCase()) return void toast("That's you! \u{1F642}", "\u{1F464}");
-    N(e2), y = "dm", S = true, L = e2, b = null, A = /* @__PURE__ */ new Set(), T = 0, (I[Y(e2)] || []).forEach((e3) => {
-      "number" == typeof e3.id && (A.add(e3.id), e3.id > T && (T = e3.id));
-    }), H[Y(e2)] = 0, ls.set("dm_unread", H), q(), c.innerHTML = `<span class="dm-peer"><span class="dm-av">${B(j(e2))}</span><span class="dm-name" id="dmPeerName">${B(e2)}</span></span>`;
-    const a2 = $("#dmPeerName");
-    a2 && a2.addEventListener("click", () => ie(e2)), d.style.display = "none", p.style.display = "inline-grid", g.style.display = "none", t.style.display = "none", n.hidden = true, s.hidden = false, f.textContent = `Direct message with ${e2} \xB7 private to you both`, r.placeholder = `Message ${e2}\u2026`, Z(), X(), clearInterval(C), C = setInterval(Q, 1200), Q(), blip(640, 0.05, "sine"), setTimeout(() => {
-      getSession() && getSession().token && r.focus();
-    }, 200);
-  }
-  function X() {
-    if (!L) return;
-    const e2 = I[Y(L)] || [];
-    if (!e2.length) return void (i.innerHTML = `<div class="chat-empty">No messages yet with ${B(L)}.<br>Send the first one! \u2709\uFE0F</div>`);
-    const t2 = i.scrollHeight - i.scrollTop - i.clientHeight < 80, n2 = O().toLowerCase();
-    i.innerHTML = e2.map((e3) => {
-      const t3 = e3.from.toLowerCase() === n2, a2 = e3.failed ? ' <span style="color:var(--accent-6)">\u26A0 not sent</span>' : e3.pending ? ' <span style="opacity:.6">\u23F3</span>' : "";
-      return `<div class="chat-msg${t3 ? " me" : ""}"><div class="meta"><span class="who">${B(e3.from)}</span><span>${_(e3.ts)}${a2}</span></div><div class="bubble">${B(e3.text)}</div></div>`;
-    }).join(""), t2 && (i.scrollTop = i.scrollHeight);
-  }
-  async function Q() {
-    if (!S || !L || document.hidden || !e.classList.contains("open")) return;
-    const e2 = L;
-    try {
-      const { ok: t2, status: n2, data: a2 } = await D(`/api/dm/${encodeURIComponent(e2)}?since=${T}`);
-      if (401 === n2) return void Z();
-      if (t2 && a2 && Array.isArray(a2.messages)) {
-        if (!S || !L || L.toLowerCase() !== e2.toLowerCase() || !e.classList.contains("open")) return;
-        const t3 = Y(e2), n3 = I[t3] || [], o2 = new Set(n3.map((e3) => e3.id));
-        let s2 = false;
-        a2.messages.forEach((e3) => {
-          "number" == typeof e3.id && e3.id > T && (T = e3.id);
-          const t4 = n3.findIndex((t5) => "string" == typeof t5.id && t5.from && e3.from && t5.from.toLowerCase() === e3.from.toLowerCase() && t5.text === e3.text);
-          t4 >= 0 ? (n3[t4] = e3, s2 = true) : o2.has(e3.id) || (n3.push(e3), o2.add(e3.id), s2 = true);
-        }), s2 && (I[t3] = n3.sort((e3, t4) => (e3.ts || 0) - (t4.ts || 0)), ls.set("dm_store", I), X()), "boolean" == typeof a2.online && N(e2, { online: a2.online }), H[t3] && (H[t3] = 0, ls.set("dm_unread", H), q());
-      }
-    } catch {
-    }
-  }
-  function Z() {
-    const e2 = !(!getSession() || !getSession().token);
-    h.style.display = e2 ? "none" : "", m.style.display = e2 ? "" : "none";
-  }
-  function ee(e2) {
-    const t2 = (getSession() || {}).username, n2 = i.scrollHeight - i.scrollTop - i.clientHeight < 80;
-    let a2 = false;
-    const fragment = document.createDocumentFragment();
-    e2.forEach((e3) => {
-      if (A.has(e3.id)) return;
-      A.add(e3.id), a2 = true, e3.id > k && (k = e3.id), N(e3.user, { online: true });
-      const n3 = t2 && e3.user.toLowerCase() === t2.toLowerCase(), o2 = document.createElement("div");
-      if (o2.className = "chat-msg" + (n3 ? " me" : ""), o2.innerHTML = `<div class="meta"><span class="who" data-user="${B(e3.user)}" style="cursor:pointer">${B(e3.user)}</span><span>${_(e3.ts)}</span></div><div class="bubble">${B(e3.text)}</div>`, !n3) {
-        const t3 = o2.querySelector(".who");
-        t3 && t3.addEventListener("click", () => ie(e3.user));
-      }
-      fragment.appendChild(o2);
-    }), i.appendChild(fragment), a2 && n2 && (i.scrollTop = i.scrollHeight);
-  }
-  async function te() {
-    if (document.hidden || !e.classList.contains("open")) return;
-    const requestedRoom = b;
-    if (null !== b) try {
-      const { ok: e2, data: t2 } = await D(`/api/chat/${b}?since=${k}`);
-      if (b !== requestedRoom || y !== "convo" || S || !e.classList.contains("open")) return;
-      e2 && t2 && ("number" == typeof t2.online && (u.textContent = t2.online), t2.messages && t2.messages.length ? (i.querySelector(".chat-empty") && (i.innerHTML = ""), ee(t2.messages)) : i.children.length || (i.innerHTML = `<div class="chat-empty">It's quiet in here\u2026 say hi! \u{1F44B}</div>`));
-    } catch {
-    }
-  }
-  function ne() {
-    clearInterval(C), C = null, R(S ? "dms" : "rooms");
-  }
-  async function ae() {
-    if (E) return;
-    const e2 = getSession();
-    if (!e2 || !e2.token) return void Z();
-    const t2 = r.value.trim();
-    if (t2) {
-      if (S) {
-        const e3 = L, n2 = Y(e3), a2 = { id: "l" + Date.now() + Math.random().toString(36).slice(2, 6), from: O(), to: e3, text: t2, ts: Date.now(), pending: true }, o2 = I[n2] || [];
-        o2.push(a2), I[n2] = o2, ls.set("dm_store", I), X(), r.value = "", r.style.height = "auto", E = true, l.disabled = true;
-        try {
-          const { ok: o3, status: s2, data: i2 } = await D(`/api/dm/${encodeURIComponent(e3)}`, { method: "POST", body: JSON.stringify({ text: t2 }) });
-          if (o3 && i2 && i2.message) {
-            const t3 = I[n2] || [], o4 = t3.indexOf(a2);
-            o4 >= 0 ? t3[o4] = i2.message : t3.push(i2.message), "number" == typeof i2.message.id && i2.message.id > T && (T = i2.message.id), I[n2] = t3.sort((e4, t4) => (e4.ts || 0) - (t4.ts || 0)), ls.set("dm_store", I), N(e3, { online: !!i2.online }), X(), blip(720, 0.05, "triangle"), Q();
-          } else 422 === s2 ? (I[n2] = (I[n2] || []).filter((e4) => e4 !== a2), ls.set("dm_store", I), X(), toast(i2 && i2.error || "Message blocked \u2014 keep it clean.", "\u{1F6AB}"), r.value = t2, r.classList.add("blocked"), setTimeout(() => r.classList.remove("blocked"), 600)) : 401 === s2 ? (I[n2] = (I[n2] || []).filter((e4) => e4 !== a2), ls.set("dm_store", I), X(), toast("Session expired \u2014 please sign in again.", "\u{1F511}"), Z(), r.value = t2) : (a2.failed = true, a2.pending = false, ls.set("dm_store", I), X(), toast(i2 && i2.error || "Could not send \u2014 server may be waking up.", "\u26A0\uFE0F"));
-        } catch {
-          a2.failed = true, a2.pending = false, ls.set("dm_store", I), X(), toast("Network error \u2014 server may be waking up.", "\u26A0\uFE0F");
-        } finally {
-          E = false, l.disabled = false, r.focus();
-        }
-        return;
-      }
-      E = true, l.disabled = true;
-      try {
-        const { ok: e3, status: n2, data: a2 } = await D(`/api/chat/${b}`, { method: "POST", body: JSON.stringify({ text: t2 }) });
-        e3 && a2.message ? (ee([a2.message]), "number" == typeof a2.online && (u.textContent = a2.online), r.value = "", r.style.height = "auto", i.scrollTop = i.scrollHeight, blip(720, 0.05, "triangle")) : 422 === n2 ? (toast(a2.error || "Message blocked \u2014 keep it clean.", "\u{1F6AB}"), r.classList.add("blocked"), setTimeout(() => r.classList.remove("blocked"), 600)) : 401 === n2 ? (toast("Session expired \u2014 please sign in again.", "\u{1F511}"), Z()) : toast(a2.error || "Could not send message.", "\u26A0\uFE0F");
-      } catch {
-        toast("Network error \u2014 server may be waking up.", "\u26A0\uFE0F");
-      } finally {
-        E = false, l.disabled = false, r.focus();
-      }
-    }
-  }
-  const oe = $("#profileBackdrop");
-  let se = null;
-  async function ie(e2) {
-    if (!e2) return;
-    se = e2, N(e2);
-    const t2 = e2.toLowerCase(), n2 = P[t2] || {};
-    $("#profileAv").firstChild.textContent = j(e2), $("#profileName").textContent = e2, $("#profileHandle").textContent = "@" + e2.toLowerCase().replace(/\s+/g, ""), $("#profileBio").textContent = n2.bio || "No bio yet.", $("#profilePres").className = "pres" + (n2.online ? " on" : "");
-    const a2 = (I[t2] || []).length;
-    $("#profileMsgs").textContent = n2.msgCount || a2 || 0, $("#profileRooms").textContent = null != n2.rooms ? n2.rooms : "\u2014", $("#profileJoined").textContent = n2.joined ? new Date(n2.joined).getFullYear() : "\u2014";
-    const o2 = !!O() && t2 === O().toLowerCase();
-    $("#profileBadges").innerHTML = (n2.online ? "<span>\u{1F7E2} Online</span>" : "") + (o2 ? "<span>\u2B50 You</span>" : "<span>\u{1F464} Member</span>"), $("#profileDm").style.display = o2 ? "none" : "", $("#profileMention").style.display = o2 ? "none" : "", oe.classList.add("open"), blip(600, 0.05, "sine");
-    for (const t3 of [`/api/users/${encodeURIComponent(e2)}`, `/api/profile/${encodeURIComponent(e2)}`]) try {
-      const { ok: n3, data: a3 } = await D(t3), o3 = a3 && (a3.user || a3.profile || (a3.username ? a3 : null));
-      if (n3 && o3) {
-        if (se !== e2) return;
-        o3.bio && ($("#profileBio").textContent = o3.bio, N(e2, { bio: o3.bio })), "boolean" == typeof o3.online && ($("#profilePres").className = "pres" + (o3.online ? " on" : "")), null != o3.messages && ($("#profileMsgs").textContent = o3.messages), null != o3.rooms && ($("#profileRooms").textContent = Array.isArray(o3.rooms) ? o3.rooms.length : o3.rooms), (o3.joined || o3.createdAt) && ($("#profileJoined").textContent = new Date(o3.joined || o3.createdAt).getFullYear(), N(e2, { joined: o3.joined || o3.createdAt }));
-        break;
-      }
-    } catch {
-    }
-  }
-  function re() {
-    oe.classList.remove("open");
-  }
-  function le() {
-    clearInterval(C);
-    if (y === "dm") { C = setInterval(Q, 2500); }
-    else if (y === "convo") { C = setInterval(te, 2500); }
-    e.classList.add("open"), e.setAttribute("aria-hidden", "false"), blip(560, 0.05), ("rooms" === y || "convo" !== y && "dm" !== y) && R("rooms"), clearInterval(x), x = setInterval(() => {
-      !document.hidden && "rooms" === y && e.classList.contains("open") && U();
-    }, 8e3), clearInterval(M), M = setInterval(() => {
-      !document.hidden && e.classList.contains("open") && ("dms" === y ? W(true) : "dm" !== y && z());
-    }, 5e3), z();
-  }
-  function ce() {
-    e.classList.remove("open"), e.setAttribute("aria-hidden", "true"), clearInterval(C), C = null, clearInterval(x), x = null, clearInterval(M), M = null;
-  }
-  $("#profileClose").addEventListener("click", re), oe.addEventListener("click", (e2) => {
-    e2.target === oe && re();
-  }), $("#profileDm").addEventListener("click", () => {
-    const t2 = se;
-    re(), e.classList.contains("open") || le(), K(t2);
-  }), $("#profileMention").addEventListener("click", () => {
-    const t2 = se;
-    re(), e.classList.contains("open") || le(), r.value = (r.value ? r.value + " " : "") + "@" + t2 + " ", r.focus();
-  }), ls.get("chat_fullscreen", false) && (e.classList.add("fullscreen"), $("#chatFullscreen").title = "Exit full screen");
-  const de = $("#navChat");
-  de && de.addEventListener("click", () => e.classList.contains("open") ? ce() : le()), $("#chatClose").addEventListener("click", ce), $("#chatFullscreen").addEventListener("click", function() {
-    const t2 = e.classList.toggle("fullscreen");
-    ls.set("chat_fullscreen", t2), $("#chatFullscreen").title = t2 ? "Exit full screen" : "Full screen", blip(t2 ? 700 : 520, 0.05, "sine");
-  }), p.addEventListener("click", ne), l.addEventListener("click", ae), $("#chatLoginBtn").addEventListener("click", () => {
-    try {
-      openLogin();
-    } catch {
-    }
-  }), r.addEventListener("keydown", (e2) => {
-    "Enter" !== e2.key || e2.shiftKey || (e2.preventDefault(), ae());
-  }), r.addEventListener("input", () => {
-    r.style.height = "auto", r.style.height = Math.min(r.scrollHeight, 110) + "px";
-  }), document.addEventListener("keydown", (t2) => {
-    if ("Escape" === t2.key) {
-      if (oe.classList.contains("open")) return void re();
-      e.classList.contains("open") && ("convo" === y || "dm" === y ? ne() : ce());
-    }
-  }), document.addEventListener("authchange", () => {
-    "convo" !== y && "dm" !== y || Z();
-  }), window.addEventListener("focus", () => {
-    "convo" !== y && "dm" !== y || Z();
-  });
-  try {
-    Z();
-  } catch {
-  }
-  return q(), { open: le, openProfile: ie, openSelfProfile: () => {
-    const e2 = O();
-    e2 && ie(e2);
-  }, meName: O, openDm: (t2) => {
-    e.classList.contains("open") || le(), K(t2);
-  }, showPeople: (t2) => {
-    e.classList.contains("open") || le(), R("people"), null != t2 && (o.value = t2, J());
-  }, listKnownPeople: () => Object.values(P) };
-})();
-document.addEventListener("DOMContentLoaded", () => {
+const ChatHub = Object.freeze({
+  open: () => toast("Community chat is disabled in this public source build.", "🔒"),
+  openProfile: () => toast("Community profiles are disabled in this public source build.", "🔒"),
+  openSelfProfile: () => toast("Community profiles are disabled in this public source build.", "🔒"),
+  meName: () => "",
+  openDm: () => toast("Direct messages are disabled in this public source build.", "🔒"),
+  showPeople: () => toast("Member lookup is disabled in this public source build.", "🔒"),
+  listKnownPeople: () => []
+});
+const navLogin = $("#navLogin");
+navLogin && navLogin.addEventListener("click", openLogin);
+const loginClose = $("#loginClose");
+loginClose && loginClose.addEventListener("click", closeLogin);
+const navChat = $("#navChat");
+navChat && navChat.addEventListener("click", () => ChatHub.open());
+const chatClose = $("#chatClose");
+chatClose && chatClose.addEventListener("click", () => {
+  const panel = $("#chatPanel");
+  if (panel) panel.classList.remove("open");
+});
+
+document.addEventListener("DOMContentLoaded", () => {document.addEventListener("DOMContentLoaded", () => {
   const e = document.getElementById("aboutBackdrop");
   function t() {
     e.classList.remove("open");
@@ -1673,227 +1144,23 @@ document.addEventListener("DOMContentLoaded", () => {
 <div class="mp-viz"><span></span><span></span><span></span><span></span></div>
 <button class="mp-next" id="mpNext" title="Next track" type="button">⏭</button> <input class="mp-vol" id="mpVol" max="100" min="0" title="Volume" type="range" value="55"/> <button class="mp-collapse" id="mpCollapse" title="Collapse" type="button">—</button>
 </div>
-<script id="hub-profile">(function() {
+<script id="hub-profile">
+(function() {
   "use strict";
   var LS_KEY = "liteMode";
   function readLS() {
-    try {
-      return JSON.parse(localStorage.getItem(LS_KEY));
-    } catch (e) {
-      return null;
-    }
+    try { return JSON.parse(localStorage.getItem(LS_KEY)); }
+    catch { return null; }
   }
-  var storedMode = readLS();
-  var mode = storedMode === "on" ? "on" : "off";
-  var isLite = mode !== "off";
-  document.documentElement.setAttribute("data-lite", isLite ? "1" : "0");
-  window.LovableLite = { get mode() {
-    return mode;
-  } };
-  var API = window.location.origin;
-  function ensureButtons() {
-    var actionsHost = document.getElementById("profileDm");
-    if (!actionsHost) return;
-    var parent = actionsHost.parentNode;
-    if (!document.getElementById("profileEditBtn")) {
-      var btn = document.createElement("button");
-      btn.id = "profileEditBtn";
-      btn.type = "button";
-      btn.textContent = "\u270F\uFE0F Edit profile";
-      btn.style.display = "none";
-      btn.addEventListener("click", openEdit);
-      parent.appendChild(btn);
-    }
-  }
-  function currentProfileName() {
-    var el = document.getElementById("profileName");
-    return el ? (el.textContent || "").trim() : "";
-  }
-  function renderAvatar(dataUrl) {
-    var av = document.getElementById("profileAv");
-    if (!av) return;
-    var old = av.querySelector("img.avatar-img");
-    if (old) old.remove();
-    if (dataUrl) {
-      var img = document.createElement("img");
-      img.className = "avatar-img";
-      img.alt = "";
-      img.src = dataUrl;
-      av.insertBefore(img, av.firstChild);
-    }
-  }
-  function loadPublicProfile(name) {
-    if (!name) return;
-    apiGet("/api/profile/" + encodeURIComponent(name)).then(function(j) {
-      if (!j || !backdrop.classList.contains("open") || currentProfileName() !== name) return;
-      var p = j.profile || j.user || j;
-      if (!p) return;
-      if (p.bio) {
-        var b = document.getElementById("profileBio");
-        if (b) b.textContent = p.bio;
-      }
-      if (p.displayName) {
-        var n = document.getElementById("profileName");
-        if (n) n.textContent = p.displayName;
-      }
-      if (p.avatar) renderAvatar(p.avatar);
-    });
-  }
-  function awaitProfileInvalidation() { void Pagefile.clear(); }
-  function openEdit() {
-    var host = document.getElementById("profileBackdrop");
-    if (!host) return;
-    var wrap = document.getElementById("profileEditWrap");
-    if (wrap) {
-      wrap.remove();
-      return;
-    }
-    wrap = document.createElement("div");
-    wrap.id = "profileEditWrap";
-    wrap.innerHTML = '<label>Display name</label><input type="text" id="peName" maxlength="40" placeholder="Your name"><label>Bio</label><textarea id="peBio" maxlength="280" placeholder="Tell people about yourself"></textarea><label>Avatar image (max ~200KB)</label><input type="file" id="peAvatar" accept="image/*"><div class="hint">Photo is stored on your profile so other people see it when they open you.</div><div class="row">  <button type="button" id="peSave">Save</button>  <button type="button" id="peCancel" class="ghost">Cancel</button></div><div class="hint" id="peMsg"></div>';
-    var card = host.querySelector(".modal") || host.firstElementChild || host;
-    card.appendChild(wrap);
-    var name = currentProfileName();
-    document.getElementById("peName").value = name || "";
-    document.getElementById("peBio").value = (document.getElementById("profileBio") || {}).textContent === "No bio yet." ? "" : (document.getElementById("profileBio") || {}).textContent || "";
-    document.getElementById("peCancel").addEventListener("click", function() {
-      wrap.remove();
-    });
-    document.getElementById("peSave").addEventListener("click", function() {
-      var msg = document.getElementById("peMsg");
-      msg.textContent = "Saving\u2026";
-      var payload = {
-        displayName: document.getElementById("peName").value.slice(0, 40),
-        bio: document.getElementById("peBio").value.slice(0, 280)
-      };
-      var file = document.getElementById("peAvatar").files[0];
-      var proceed = function() {
-        apiPut("/api/profile", payload).then(function(res) {
-          if (res && res.ok) {
-            awaitProfileInvalidation();
-            msg.textContent = "Saved. Other people can see it now.";
-            if (payload.avatar) renderAvatar(payload.avatar);
-            if (payload.displayName) {
-              var n = document.getElementById("profileName");
-              if (n) n.textContent = payload.displayName;
-            }
-            if (typeof payload.bio === "string") {
-              var b = document.getElementById("profileBio");
-              if (b) b.textContent = payload.bio;
-            }
-          } else {
-            msg.textContent = "Save failed: " + (res && res.data && res.data.error || "unknown");
-          }
-        }).catch(function(e) {
-          msg.textContent = "Network error";
-        });
-      };
-      if (file) {
-        if (file.size > 800 * 1024) {
-          msg.textContent = "Image too big (max ~800KB before compression).";
-          return;
-        }
-        var reader = new FileReader();
-        reader.onload = function() {
-          var img = new Image();
-          img.onload = function() {
-            var maxDim = 256;
-            var scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-            var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
-            var c = document.createElement("canvas");
-            c.width = w;
-            c.height = h;
-            var ctx = c.getContext("2d");
-            if (!ctx) { msg.textContent = "Image processing is unavailable."; return; }
-            ctx.drawImage(img, 0, 0, w, h);
-            payload.avatar = c.toDataURL("image/jpeg", 0.82);
-            if (payload.avatar.length > 22e4) {
-              payload.avatar = c.toDataURL("image/jpeg", 0.6);
-            }
-            proceed();
-          };
-          img.onerror = function() {
-            msg.textContent = "Invalid image";
-          };
-          img.src = reader.result;
-        };
-        reader.onerror = function() { msg.textContent = "Could not read image."; };
-        reader.readAsDataURL(file);
-      } else {
-        proceed();
-      }
-    });
-  }
-  var backdrop = document.getElementById("profileBackdrop");
-  if (backdrop) {
-    var mo = new MutationObserver(function() {
-      if (backdrop.classList.contains("open")) {
-        ensureButtons();
-        var name = currentProfileName();
-        var me = meName();
-        var isSelf = !!me && !!name && me.toLowerCase() === name.toLowerCase();
-        var eb = document.getElementById("profileEditBtn");
-        if (eb) eb.style.display = isSelf ? "" : "none";
-        loadPublicProfile(name);
-      } else {
-        var wrap = document.getElementById("profileEditWrap");
-        if (wrap) wrap.remove();
-      }
-    });
-    mo.observe(backdrop, { attributes: true, attributeFilter: ["class"] });
-  }
-  function findToken() {
-    var keys = ["auth_session", "authToken", "token", "jwt", "auth", "JENITZIO_TOKEN", "jenitzio_token"];
-    for (var i = 0; i < keys.length; i++) {
-      var raw = "";
-      try {
-        raw = localStorage.getItem(keys[i]) || "";
-      } catch (e) {
-      }
-      if (!raw) continue;
-      try {
-        var v = JSON.parse(raw);
-        if (typeof v === "string" && v.length > 20) return v;
-        if (v && typeof v === "object" && v.token) return v.token;
-      } catch (e) {
-        if (raw.length > 20 && raw.split(".").length === 3) return raw;
-      }
-    }
-    return "";
-  }
-  function meName() {
-    try {
-      var token = findToken();
-      if (!token) return null;
-      var part = token.split(".")[1];
-      if (!part) return null;
-      part = part.replace(/-/g, "+").replace(/_/g, "/");
-      while (part.length % 4) part += "=";
-      var payload = JSON.parse(atob(part));
-      return payload && (payload.sub || payload.username) || null;
-    } catch (e) {
-      return null;
-    }
-  }
-  function apiGet(path) {
-    return Pagefile.profile(API + path);
-  }
-  function apiPut(path, body) {
-    var token = findToken();
-    return safeFetch(API + path, { method: "PUT", headers: { "Content-Type": "application/json", "Authorization": token ? "Bearer " + token : "" }, body: JSON.stringify(body || {}) }, 2e4).then(function(r) {
-      return r.text().then(function(text) {
-        var data = {};
-        if (text) try {
-          data = JSON.parse(text);
-        } catch (e) {
-          data = { message: text };
-        }
-        return { ok: r.ok, status: r.status, data };
-      });
-    }).catch(function(error) {
-      return { ok: false, status: 0, data: { message: error && error.name === "AbortError" ? "Request timed out" : "Network error" } };
-    });
-  }
+  var mode = readLS() === "on" ? "on" : "off";
+  document.documentElement.setAttribute("data-lite", mode === "on" ? "1" : "0");
+  window.LovableLite = { get mode() { return mode; } };
+
+  // This public source build deliberately has no account, profile, or chat backend integration.
+  ["loginBackdrop", "chatPanel", "profileBackdrop"].forEach(function(id) {
+    var element = document.getElementById(id);
+    if (element) element.remove();
+  });
 })();
 </script>
 <style id="jx-enhance-css">
