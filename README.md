@@ -52,7 +52,7 @@ This repository contains the hub's main front-end page. Some destinations opened
     </td>
     <td width="50%" valign="top">
       <h3>04 / Community features</h3>
-      Account, profile, direct-message, and chat-room interfaces connect the hub to a separate server-side API.
+      The public source intentionally has no account, profile, direct-message, or community-chat backend connection. Those features are disabled here so this repository does not call your private server.
     </td>
   </tr>
   <tr>
@@ -126,7 +126,7 @@ Then open:
 
 **http://localhost:8000/jenitzio.html**
 
-You can also open <code>jenitzio.html</code> directly in a browser for a quick static inspection. A local preview is not a complete copy of the hosted experience: AI responses, account functions, chat, and other origin- or API-dependent features may require their external services and server configuration.
+You can also open <code>jenitzio.html</code> directly in a browser for a quick static inspection. In this public source version, account, profile, direct-message, and community-chat backend integration is intentionally disabled. The optional AI helper uses the external Pollinations service. This repository does not configure, deploy, or administer your private server.
 
 ## Technology
 
@@ -137,10 +137,16 @@ You can also open <code>jenitzio.html</code> directly in a browser for a quick s
 | Styling | Inline styles and custom CSS within the main HTML page |
 | Personalization | Browser-side storage for preferences and favorites |
 | AI helper | External Pollinations text-generation service |
-| Accounts and community chat | Separate server-side API |
+| Accounts and community chat | Backend integration deliberately disabled in this public source build |
 | Typography and external content | External web resources, including Google Fonts |
 
 The current repository intentionally keeps its main hub page concentrated in one HTML entry point. The linked projects and services may use different stacks and are maintained separately.
+
+## Backend separation
+
+This public repository contains no private backend host address or API route calls. Account, profile, direct-message, and community-chat integration is disabled in this copy; the browser's Content Security Policy only permits connections to the external text service used by the optional AI helper.
+
+**This separates the public frontend source from the private backend; it does not by itself secure a running server.** Server binding, firewall rules, reverse-proxy routes, authentication, and deployment hooks must be checked on the server independently.
 
 ## Repository structure
 
